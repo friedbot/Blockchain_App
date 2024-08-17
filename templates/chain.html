@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blockchain</title>
+</head>
+<body>
+    <h1>Blockchain</h1>
+    <a href="/">Back to Home</a><br>
+    <h2>Blockchain Chain</h2>
+    <table border="1">
+        <tr>
+            <th>Index</th>
+            <th>Timestamp</th>
+            <th>Proof</th>
+            <th>Previous Hash</th>
+            <th>Transactions</th>
+        </tr>
+        {% for block in chain %}
+        <tr>
+            <td>{{ block.index }}</td>
+            <td>{{ block.timestamp }}</td>
+            <td>{{ block.proof }}</td>
+            <td>{{ block.previous_hash }}</td>
+            <td>
+                <ul>
+                    {% for transaction in block.transactions %}
+                    <li>
+                        Serial Number: {{ transaction.serial_number }}<br>
+                        Sender: {{ transaction.sender }}<br>
+                        Receiver: {{ transaction.receiver }}<br>
+                        Amount: {{ transaction.amount }}<br>
+                        Freeze: {{ transaction.is_freeze }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

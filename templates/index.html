@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blockchain</title>
+</head>
+<body>
+    <h1>Welcome to the Blockchain App</h1>
+    <a href="/get_chain">View the Blockchain</a><br>
+    <a href="/is_valid">Check if Blockchain is Valid</a><br>
+    <h2>Add a Transaction</h2>
+    <form action="/add_transaction" method="POST">
+        Sender: <input type="text" name="sender" required><br>
+        Receiver: <input type="text" name="receiver" required><br>
+        Amount: <input type="text" name="amount" required><br>
+        Freeze Transaction: <input type="checkbox" name="is_freeze"><br>
+        <input type="submit" value="Add Transaction">
+    </form>
+
+    {% if latest_hash %}
+        <h2>Current Latest Block Hash:</h2>
+        <p>{{ latest_hash }}</p>
+    {% else %}
+        <h2>No blocks in the chain yet.</h2>
+    {% endif %}
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transaction History</title>
+</head>
+<body>
+    <h1>Transaction History for {{ address }}</h1>
+    <a href="/">Back to Home</a><br>
+    <h2>Transactions</h2>
+    <table border="1">
+        <tr>
+            <th>Block Index</th>
+            <th>Serial Number</th>
+            <th>Sender</th>
+            <th>Receiver</th>
+            <th>Amount</th>
+            <th>Freeze</th>
+        </tr>
+        {% for block in transactions %}
+            {% for transaction in block.transactions %}
+                {% if transaction.sender == address or transaction.receiver == address %}
+                <tr>
+                    <td>{{ block.index }}</td>
+                    <td>{{ transaction.serial_number }}</td>
+                    <td>{{ transaction.sender }}</td>
+                    <td>{{ transaction.receiver }}</td>
+                    <td>{{ transaction.amount }}</td>
+                    <td>{{ transaction.is_freeze }}</td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    </table>
+</body>
+</html>
