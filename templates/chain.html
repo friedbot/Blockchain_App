@@ -14,6 +14,7 @@
             <th>Proof</th>
             <th>Previous Hash</th>
             <th>Transactions</th>
+            <th>Current Hash</th>
         </tr>
         {% for block in chain %}
         <tr>
@@ -34,6 +35,7 @@
                     {% endfor %}
                 </ul>
             </td>
+            <td>{{ block.hash }}</td>
         </tr>
         {% endfor %}
     </table>

@@ -3,11 +3,16 @@ import hashlib
 import json
 from flask import Flask, jsonify, request, render_template, redirect, url_for
 from uuid import uuid4
+import random
+
+app = Flask(__name__)
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 class Blockchain:
     def __init__(self):
         self.chain = []
         self.transactions = []
+        self.wallets = {}  # Dictionary to store wallet addresses and balances
         self.create_block(proof=1, previous_hash='0')
 
     def create_block(self, proof, previous_hash):
@@ -18,6 +23,7 @@ class Blockchain:
             'previous_hash': previous_hash,
             'transactions': self.transactions
         }
+        block['hash'] = self.hash(block)  # Compute the hash of the block
         self.transactions = []
         self.chain.append(block)
         return block
@@ -37,7 +43,10 @@ class Blockchain:
         return new_proof
 
     def hash(self, block):
-        encoded_block = json.dumps(block, sort_keys=True).encode()
+        # Exclude 'hash' key from block while hashing
+        block_copy = block.copy()
+        block_copy.pop('hash', None)
+        encoded_block = json.dumps(block_copy, sort_keys=True).encode()
         return hashlib.sha256(encoded_block).hexdigest()
 
     def is_chain_valid(self, chain):
@@ -76,9 +85,23 @@ class Blockchain:
         block = self.create_block(proof, previous_hash)
         return block
 
-# Flask web application to interact with the blockchain
-app = Flask(__name__)
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+    def create_wallet(self, address):
+        if address in self.wallets:
+            raise ValueError("Wallet already exists")
+        self.wallets[address] = 0
+        return self.wallets[address]
+
+    def get_balance(self, address):
+        if address in self.wallets:
+            return self.wallets[address]
+        else:
+            raise ValueError("Wallet does not exist")
+
+    def add_funds(self, address, amount):
+        if address in self.wallets:
+            self.wallets[address] += amount
+        else:
+            raise ValueError("Wallet does not exist")
 
 blockchain = Blockchain()
 
@@ -101,10 +124,38 @@ def is_valid():
 def add_transaction():
     sender = request.form['sender']
     receiver = request.form['receiver']
-    amount = request.form['amount']
+    amount = float(request.form['amount'])
     is_freeze = request.form.get('is_freeze') == 'on'
     block = blockchain.add_transaction_and_create_block(sender, receiver, amount, is_freeze)
     return redirect(url_for('get_chain'))
+
+@app.route('/create_wallet', methods=['POST'])
+def create_wallet():
+    address = request.form['address']
+    try:
+        balance = blockchain.create_wallet(address)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for('index'))
+
+@app.route('/get_balance', methods=['GET'])
+def get_balance():
+    address = request.args.get('address')
+    try:
+        balance = blockchain.get_balance(address)
+        return render_template('balance.html', address=address, balance=balance)
+    except ValueError as e:
+        return str(e), 400
+
+@app.route('/add_funds', methods=['POST'])
+def add_funds():
+    address = request.form['address']
+    amount = random.randint(10, 100)  # Random amount between 10 and 100
+    try:
+        blockchain.add_funds(address, amount)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

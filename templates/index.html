@@ -7,6 +7,16 @@
     <h1>Welcome to the Blockchain App</h1>
     <a href="/get_chain">View the Blockchain</a><br>
     <a href="/is_valid">Check if Blockchain is Valid</a><br>
+    <h2>Create a Wallet</h2>
+    <form action="/create_wallet" method="POST">
+        Address: <input type="text" name="address" required><br>
+        <input type="submit" value="Create Wallet">
+    </form>
+    <h2>Check Balance</h2>
+    <form action="/get_balance" method="GET">
+        Address: <input type="text" name="address" required><br>
+        <input type="submit" value="Check Balance">
+    </form>
     <h2>Add a Transaction</h2>
     <form action="/add_transaction" method="POST">
         Sender: <input type="text" name="sender" required><br>
@@ -15,12 +25,10 @@
         Freeze Transaction: <input type="checkbox" name="is_freeze"><br>
         <input type="submit" value="Add Transaction">
     </form>
-
-    {% if latest_hash %}
-        <h2>Current Latest Block Hash:</h2>
-        <p>{{ latest_hash }}</p>
-    {% else %}
-        <h2>No blocks in the chain yet.</h2>
-    {% endif %}
+    <h2>Add Funds</h2>
+    <form action="/add_funds" method="POST">
+        Address: <input type="text" name="address" required><br>
+        <input type="submit" value="Add Funds">
+    </form>
 </body>
 </html>
