@@ -2,12 +2,31 @@
 <html>
 <head>
     <title>Blockchain</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #aaa;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #ddd;
+        }
+        .transaction {
+            border: 1px solid #ccc;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+    </style>
 </head>
 <body>
     <h1>Blockchain</h1>
     <a href="/">Back to Home</a><br>
     <h2>Blockchain Chain</h2>
-    <table border="1">
+    <table>
         <tr>
             <th>Index</th>
             <th>Timestamp</th>
@@ -23,17 +42,21 @@
             <td>{{ block.proof }}</td>
             <td>{{ block.previous_hash }}</td>
             <td>
-                <ul>
-                    {% for transaction in block.transactions %}
-                    <li>
-                        Serial Number: {{ transaction.serial_number }}<br>
-                        Sender: {{ transaction.sender }}<br>
-                        Receiver: {{ transaction.receiver }}<br>
-                        Amount: {{ transaction.amount }}<br>
-                        Freeze: {{ transaction.is_freeze }}
-                    </li>
-                    {% endfor %}
-                </ul>
+                {% for transaction in block.transactions %}
+                <div class="transaction">
+                    {% if transaction.serial_number %}
+                    <strong>Serial Number:</strong> {{ transaction.serial_number }}<br>
+                    {% endif %}
+                    <strong>Sender:</strong> {{ transaction.sender }}<br>
+                    <strong>Receiver:</strong> {{ transaction.receiver }}<br>
+                    <strong>Amount:</strong> {{ transaction.amount }}<br>
+                    <strong>Freeze:</strong> {{ transaction.is_freeze }}<br>
+                    <strong>Status:</strong> {{ transaction.status }}<br>
+                    {% if transaction.reason %}
+                    <strong>Reason:</strong> {{ transaction.reason }}<br>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </td>
             <td>{{ block.hash }}</td>
         </tr>

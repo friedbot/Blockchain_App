@@ -12,7 +12,7 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.transactions = []
-        self.wallets = {}  # Dictionary to store wallet addresses and balances
+        self.wallets = {}  # Dictionary to store wallet addresses, balances, and serial numbers
         self.allowed_denominations = [1, 2, 5, 10, 50, 100, 200, 500]
         self.create_block(proof=1, previous_hash='0')
 
@@ -36,7 +36,9 @@ class Blockchain:
         new_proof = 1
         check_proof = False
         while not check_proof:
-            hash_operation = hashlib.sha256(str(new_proof ** 2 - previous_proof ** 2).encode()).hexdigest()
+            hash_operation = hashlib.sha256(
+                str(new_proof ** 2 - previous_proof ** 2).encode()
+            ).hexdigest()
             if hash_operation[:4] == '0000':
                 check_proof = True
             else:
@@ -58,7 +60,9 @@ class Blockchain:
                 return False
             previous_proof = previous_block['proof']
             proof = block['proof']
-            hash_operation = hashlib.sha256(str(proof ** 2 - previous_proof ** 2).encode()).hexdigest()
+            hash_operation = hashlib.sha256(
+                str(proof ** 2 - previous_proof ** 2).encode()
+            ).hexdigest()
             if hash_operation[:4] != '0000':
                 return False
             previous_block = block
@@ -86,8 +90,11 @@ class Blockchain:
             'sender': sender,
             'receiver': receiver,
             'amount': optimized_amount,
-            'is_freeze': is_freeze
+            'is_freeze': is_freeze,
+            'status': 'success'  # Default status
         }
+
+        # Add transaction to the list
         self.transactions.append(transaction)
 
         # Perform fund transfer if the transaction is valid
@@ -117,7 +124,7 @@ class Blockchain:
     def create_wallet(self, address, password):
         if address in self.wallets:
             raise ValueError("Wallet already exists")
-        self.wallets[address] = {'balance': 0, 'password': self.hash_password(password)}
+        self.wallets[address] = {'balance': 0, 'password': self.hash_password(password), 'serial_numbers': []}
         return self.wallets[address]['balance']
 
     def get_balance(self, address):
@@ -126,12 +133,48 @@ class Blockchain:
         else:
             raise ValueError("Wallet does not exist")
 
-    def add_funds(self, address, amount):
+    def add_funds(self, address, amount, serial):
         if address in self.wallets:
-            if amount in self.allowed_denominations:
-                self.wallets[address]['balance'] += amount
-            else:
+            if amount not in self.allowed_denominations:
                 raise ValueError("Amount must be in allowed denominations")
+
+            # Check for serial number duplication
+            for wallet in self.wallets.values():
+                if serial in wallet['serial_numbers']:
+                    self.transactions.append({
+                        'sender': 'Admin',
+                        'receiver': address,
+                        'amount': amount,
+                        'serial_number': serial,
+                        'is_freeze': False,
+                        'status': 'failed',
+                        'reason': 'Duplicate serial number'
+                    })
+                    return "Duplicate serial number", 400
+
+            # Add funds and serial number to the wallet
+            self.wallets[address]['balance'] += amount
+            self.wallets[address]['serial_numbers'].append(serial)
+
+            # Record the transaction as successful
+            transaction = {
+                'sender': 'Admin',
+                'receiver': address,
+                'amount': amount,
+                'serial_number': serial,
+                'is_freeze': False,
+                'status': 'success'
+            }
+            self.transactions.append(transaction)
+
+            # Add the transaction to the blockchain by creating a new block
+            previous_block = self.get_previous_block()
+            previous_proof = previous_block['proof']
+            proof = self.proof_of_work(previous_proof)
+            previous_hash = self.hash(previous_block)
+            block = self.create_block(proof, previous_hash)
+            return block
+
         else:
             raise ValueError("Wallet does not exist")
 
@@ -203,12 +246,15 @@ def get_balance():
 @app.route('/add_funds', methods=['POST'])
 def add_funds():
     address = request.form['address']
-    amount = int(request.form['amount'])  # Changed to int for proper comparison
+    amount = int(request.form['amount'])
+    serial = request.form['serial']
     try:
-        blockchain.add_funds(address, amount)
+        response = blockchain.add_funds(address, amount, serial)
+        if isinstance(response, tuple) and response[1] == 400:
+            return response[0], 400  # Return the error message if there's an issue
     except ValueError as e:
         return str(e), 400
-    return redirect(url_for('index'))
+    return redirect(url_for('get_chain'))
 
 
 if __name__ == '__main__':
