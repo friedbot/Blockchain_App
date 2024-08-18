@@ -7,27 +7,34 @@
     <h1>Welcome to the Blockchain App</h1>
     <a href="/get_chain">View the Blockchain</a><br>
     <a href="/is_valid">Check if Blockchain is Valid</a><br>
+
     <h2>Create a Wallet</h2>
     <form action="/create_wallet" method="POST">
         Address: <input type="text" name="address" required><br>
+        Password: <input type="password" name="password" required><br>
         <input type="submit" value="Create Wallet">
     </form>
+
     <h2>Check Balance</h2>
     <form action="/get_balance" method="GET">
         Address: <input type="text" name="address" required><br>
         <input type="submit" value="Check Balance">
     </form>
+
     <h2>Add a Transaction</h2>
     <form action="/add_transaction" method="POST">
         Sender: <input type="text" name="sender" required><br>
+        Password: <input type="password" name="password" required><br>
         Receiver: <input type="text" name="receiver" required><br>
         Amount: <input type="text" name="amount" required><br>
         Freeze Transaction: <input type="checkbox" name="is_freeze"><br>
         <input type="submit" value="Add Transaction">
     </form>
+
     <h2>Add Funds</h2>
     <form action="/add_funds" method="POST">
         Address: <input type="text" name="address" required><br>
+        Amount: <input type="text" name="amount" required><br>
         <input type="submit" value="Add Funds">
     </form>
 </body>
