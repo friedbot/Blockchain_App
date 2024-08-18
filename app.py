@@ -69,6 +69,20 @@ class Blockchain:
         return str(uuid4())
 
     def add_transaction_and_create_block(self, sender, receiver, amount, is_freeze=False):
+        # Check if both sender and receiver wallets exist
+        if sender not in self.wallets:
+            raise ValueError("Sender wallet does not exist")
+        if receiver not in self.wallets:
+            raise ValueError("Receiver wallet does not exist")
+
+        # Check if the sender has enough balance
+        if self.wallets[sender] < amount:
+            raise ValueError("Sender does not have enough funds")
+
+        # Update the wallet balances
+        self.wallets[sender] -= amount
+        self.wallets[receiver] += amount
+
         serial_number = self.generate_serial_number()
         transaction = {
             'serial_number': serial_number,
@@ -126,7 +140,10 @@ def add_transaction():
     receiver = request.form['receiver']
     amount = float(request.form['amount'])
     is_freeze = request.form.get('is_freeze') == 'on'
-    block = blockchain.add_transaction_and_create_block(sender, receiver, amount, is_freeze)
+    try:
+        block = blockchain.add_transaction_and_create_block(sender, receiver, amount, is_freeze)
+    except ValueError as e:
+        return str(e), 400
     return redirect(url_for('get_chain'))
 
 @app.route('/create_wallet', methods=['POST'])
@@ -158,4 +175,4 @@ def add_funds():
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
