@@ -2,7 +2,6 @@ import datetime
 import hashlib
 import json
 from flask import Flask, jsonify, request, render_template, redirect, url_for
-from uuid import uuid4
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
@@ -12,7 +11,7 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.transactions = []
-        self.wallets = {}  # Dictionary to store wallet addresses, balances, and serial numbers
+        self.wallets = {}  # Dictionary to store wallet addresses, balances, denominations, and serial numbers
         self.allowed_denominations = [1, 2, 5, 10, 50, 100, 200, 500]
         self.create_block(proof=1, previous_hash='0')
 
@@ -124,7 +123,11 @@ class Blockchain:
     def create_wallet(self, address, password):
         if address in self.wallets:
             raise ValueError("Wallet already exists")
-        self.wallets[address] = {'balance': 0, 'password': self.hash_password(password), 'serial_numbers': []}
+        self.wallets[address] = {
+            'balance': 0,
+            'password': self.hash_password(password),
+            'denominations': {}  # To store denominations with their serial numbers
+        }
         return self.wallets[address]['balance']
 
     def get_balance(self, address):
@@ -140,7 +143,7 @@ class Blockchain:
 
             # Check for serial number duplication
             for wallet in self.wallets.values():
-                if serial in wallet['serial_numbers']:
+                if serial in [s for serials in wallet['denominations'].values() for s in serials]:
                     self.transactions.append({
                         'sender': 'Admin',
                         'receiver': address,
@@ -153,8 +156,10 @@ class Blockchain:
                     return "Duplicate serial number", 400
 
             # Add funds and serial number to the wallet
+            if amount not in self.wallets[address]['denominations']:
+                self.wallets[address]['denominations'][amount] = []
+            self.wallets[address]['denominations'][amount].append(serial)
             self.wallets[address]['balance'] += amount
-            self.wallets[address]['serial_numbers'].append(serial)
 
             # Record the transaction as successful
             transaction = {
@@ -185,6 +190,12 @@ class Blockchain:
         hashed_password = self.hash_password(password)
         return self.wallets[address]['password'] == hashed_password
 
+    def find_owner_by_serial(self, serial_number):
+        for address, wallet in self.wallets.items():
+            for amount, serials in wallet['denominations'].items():
+                if serial_number in serials:
+                    return address
+        return None
 
 blockchain = Blockchain()
 
@@ -238,7 +249,8 @@ def get_balance():
     address = request.args.get('address')
     try:
         balance = blockchain.get_balance(address)
-        return render_template('balance.html', address=address, balance=balance)
+        denominations = blockchain.wallets[address]['denominations']
+        return render_template('balance.html', address=address, balance=balance, denominations=denominations)
     except ValueError as e:
         return str(e), 400
 
@@ -256,6 +268,18 @@ def add_funds():
         return str(e), 400
     return redirect(url_for('get_chain'))
 
+
+@app.route('/find_owner', methods=['GET'])
+def find_owner():
+    serial_number = request.args.get('serial_number')
+    if not serial_number:
+        return "Serial number is required", 400
+
+    owner = blockchain.find_owner_by_serial(serial_number)
+    if owner:
+        return jsonify({'serial_number': serial_number, 'owner': owner})
+    else:
+        return "Serial number not found", 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
