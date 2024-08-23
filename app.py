@@ -1,22 +1,24 @@
 import datetime
 import hashlib
 import json
-from flask import Flask, jsonify, request, render_template, redirect, url_for
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your_secret_key'  # Set a secret key for session management
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 BLOCKCHAIN_FILE = 'blockchain.json'
 WALLETS_FILE = 'wallets.json'
+USERS_FILE = 'users.json'
 
 class Blockchain:
     def __init__(self):
         self.chain = self.load_chain()
         self.transactions = []
-        self.wallets = self.load_wallets()  # Load wallets from JSON file
+        self.wallets = self.load_wallets()
+        self.users = self.load_users()
         self.allowed_denominations = [1, 2, 5, 10, 50, 100, 200, 500]
 
-        # Check if the blockchain is empty and create a genesis block if necessary
         if not self.chain:
             self.create_block(proof=1, previous_hash='0')
 
@@ -28,10 +30,10 @@ class Blockchain:
             'previous_hash': previous_hash,
             'transactions': self.transactions
         }
-        block['hash'] = self.hash(block)  # Compute the hash of the block
+        block['hash'] = self.hash(block)
         self.transactions = []
         self.chain.append(block)
-        self.save_chain()  # Save the blockchain to the JSON file
+        self.save_chain()
         return block
 
     def get_previous_block(self):
@@ -79,21 +81,17 @@ class Blockchain:
     def add_transaction_and_create_block(self, sender, password, receiver, amount):
         optimized_amount = self.optimize_amount(amount)
 
-        # Check if both sender and receiver wallets exist
         if sender not in self.wallets:
             return "Sender wallet does not exist", 400
         if receiver not in self.wallets:
             return "Receiver wallet does not exist", 400
 
-        # Verify the password
         if not self.verify_password(sender, password):
             return "Incorrect password", 400
 
-        # Check if the sender has enough balance
         if self.wallets[sender]['balance'] < optimized_amount:
             return "Sender does not have enough funds", 400
 
-        # Check if the sender's wallet is suspended
         if self.wallets[sender].get('is_suspended', False):
             return "Sender's wallet is suspended", 400
 
@@ -101,13 +99,10 @@ class Blockchain:
             'sender': sender,
             'receiver': receiver,
             'amount': optimized_amount,
-            'status': 'success'  # Default status
+            'status': 'success'
         }
 
-        # Add transaction to the list
         self.transactions.append(transaction)
-
-        # Perform fund transfer if the transaction is valid
         self.transfer_funds(sender, receiver, optimized_amount)
 
         previous_block = self.get_previous_block()
@@ -127,10 +122,9 @@ class Blockchain:
         return result
 
     def transfer_funds(self, sender, receiver, amount):
-        # Update the wallet balances
         self.wallets[sender]['balance'] -= amount
         self.wallets[receiver]['balance'] += amount
-        self.save_wallets()  # Save the updated wallets data
+        self.save_wallets()
 
     def create_wallet(self, address, password):
         if address in self.wallets:
@@ -138,10 +132,10 @@ class Blockchain:
         self.wallets[address] = {
             'balance': 0,
             'password': self.hash_password(password),
-            'denominations': {},  # To store denominations with their serial numbers
-            'is_suspended': False  # Initial state of the wallet
+            'denominations': {},
+            'is_suspended': False
         }
-        self.save_wallets()  # Save the new wallet
+        self.save_wallets()
         return self.wallets[address]['balance']
 
     def get_balance(self, address):
@@ -155,7 +149,6 @@ class Blockchain:
             if amount not in self.allowed_denominations:
                 raise ValueError("Amount must be in allowed denominations")
 
-            # Check for serial number duplication
             for wallet in self.wallets.values():
                 if serial in [s for serials in wallet['denominations'].values() for s in serials]:
                     self.transactions.append({
@@ -166,16 +159,14 @@ class Blockchain:
                         'status': 'failed',
                         'reason': 'Duplicate serial number'
                     })
-                    self.save_chain()  # Save the transaction to the blockchain
+                    self.save_chain()
                     return "Duplicate serial number", 400
 
-            # Add funds and serial number to the wallet
             if amount not in self.wallets[address]['denominations']:
                 self.wallets[address]['denominations'][amount] = []
             self.wallets[address]['denominations'][amount].append(serial)
             self.wallets[address]['balance'] += amount
 
-            # Record the transaction as successful
             transaction = {
                 'sender': 'Admin',
                 'receiver': address,
@@ -185,13 +176,12 @@ class Blockchain:
             }
             self.transactions.append(transaction)
 
-            # Add the transaction to the blockchain by creating a new block
             previous_block = self.get_previous_block()
             previous_proof = previous_block['proof']
             proof = self.proof_of_work(previous_proof)
             previous_hash = self.hash(previous_block)
             block = self.create_block(proof, previous_hash)
-            self.save_wallets()  # Save the updated wallet data
+            self.save_wallets()
             return block
 
         else:
@@ -207,10 +197,9 @@ class Blockchain:
     def hash_password(self, password):
         return hashlib.sha256(password.encode()).hexdigest()
 
-    def verify_password(self, address, password):
+    def verify_password(self, username, password):
         hashed_password = self.hash_password(password)
-        return self.wallets[address]['password'] == hashed_password
-
+        return self.users.get(username) == hashed_password
 
     def save_chain(self):
         with open(BLOCKCHAIN_FILE, 'w') as file:
@@ -234,11 +223,30 @@ class Blockchain:
         except (FileNotFoundError, json.JSONDecodeError):
             return {}
 
+    def save_users(self):
+        with open(USERS_FILE, 'w') as file:
+            json.dump(self.users, file, indent=4)
+
+    def load_users(self):
+        try:
+            with open(USERS_FILE, 'r') as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
 blockchain = Blockchain()
 
 @app.route('/')
 def index():
-    return render_template('index.html', denominations=blockchain.allowed_denominations)
+    if 'username' in session:
+        address = session['username']
+        try:
+            balance = blockchain.get_balance(address)
+        except ValueError:
+            balance = None
+        return render_template('index.html', balance=balance)
+    return render_template('index.html')
+
 
 @app.route('/get_chain', methods=['GET'])
 def get_chain():
@@ -251,56 +259,146 @@ def is_valid():
     message = 'All Good' if is_valid else 'Not a valid blockchain'
     return render_template('is_valid.html', message=message)
 
-@app.route('/add_transaction', methods=['POST'])
-def add_transaction():
-    sender = request.form['sender']
-    password = request.form['password']
-    receiver = request.form['receiver']
-    amount = float(request.form['amount'])
-
-    response = blockchain.add_transaction_and_create_block(sender, password, receiver, amount)
-    if isinstance(response, tuple) and response[1] == 400:
-        return response[0], 400  # Return the error message if there's an issue
-
-    return redirect(url_for('get_chain'))
+@app.route('/create_wallet_page', methods=['GET'])
+def create_wallet_page():
+    return "Wallet creation is not allowed. Please log in to access other features."
 
 @app.route('/create_wallet', methods=['POST'])
 def create_wallet():
-    address = request.form['address']
-    password = request.form['password']
-    try:
-        balance = blockchain.create_wallet(address, password)
-    except ValueError as e:
-        return str(e), 400
-    return redirect(url_for('get_chain'))
+    return "Wallet creation is not allowed. Please log in to access other features."
 
-@app.route('/get_balance/<address>', methods=['GET'])
-def get_balance(address):
+@app.route('/get_balance_page', methods=['GET'])
+def get_balance_page():
+    return render_template('check_balance.html')
+
+@app.route('/get_balance', methods=['GET'])
+def get_balance():
+    if 'username' not in session:
+        return "Unauthorized access", 403
+
+    address = session['username']
     try:
         balance = blockchain.get_balance(address)
         return jsonify({'balance': balance}), 200
     except ValueError as e:
         return str(e), 400
 
+@app.route('/check_balance', methods=['POST'])
+def check_balance():
+    address = request.form.get('address')
+    balance = None
+    if address:
+        try:
+            balance = blockchain.get_balance(address)
+        except ValueError as e:
+            balance = str(e)
+    return render_template('index.html', balance=balance)
+
+@app.route('/add_funds_page', methods=['GET'])
+def add_funds_page():
+    return render_template('add_funds.html')
+
 @app.route('/add_funds', methods=['POST'])
 def add_funds():
-    address = request.form['address']
+    if 'username' not in session:
+        return "Unauthorized access", 403
+
+    address = session['username']
     amount = float(request.form['amount'])
     serial = request.form['serial']
     try:
         block = blockchain.add_funds(address, amount, serial)
+        return redirect(url_for('get_chain'))
     except ValueError as e:
         return str(e), 400
-    return redirect(url_for('get_chain'))
+
+@app.route('/suspend_wallet_page', methods=['GET'])
+def suspend_wallet_page():
+    return render_template('suspend_wallet.html')
 
 @app.route('/suspend_wallet', methods=['POST'])
 def suspend_wallet():
-    address = request.form['address']
+    if 'username' not in session:
+        return "Unauthorized access", 403
+
+    address = session['username']
     try:
         blockchain.suspend_wallet(address)
+        return redirect(url_for('index'))
     except ValueError as e:
         return str(e), 400
+
+@app.route('/find_owner_page', methods=['GET'])
+def find_owner_page():
+    return render_template('find_owner.html')
+
+@app.route('/find_owner', methods=['GET'])
+def find_owner():
+    serial = request.args.get('serial')
+    owner = None
+    for address, wallet in blockchain.wallets.items():
+        if serial in wallet['denominations'].get(wallet['denominations'].get('amount', [])):
+            owner = address
+            break
+    if owner:
+        return jsonify({'owner': owner}), 200
+    return "Serial number not found", 404
+
+@app.route('/transfer_funds_page', methods=['GET'])
+def transfer_funds_page():
+    return render_template('transfer_funds.html')
+
+@app.route('/add_transaction', methods=['POST'])
+def add_transaction():
+    if 'username' not in session:
+        return "Unauthorized access", 403
+
+    sender = session['username']
+    password = request.form['password']
+    receiver = request.form['receiver']
+    amount = float(request.form['amount'])
+    response = blockchain.add_transaction_and_create_block(sender, password, receiver, amount)
+    if isinstance(response, tuple) and response[1] == 400:
+        return response[0], 400
     return redirect(url_for('get_chain'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login_page():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if blockchain.verify_password(username, password):
+            session['username'] = username
+            return redirect(url_for('index'))
+        return "Invalid credentials", 400
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('index'))
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register_page():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if username in blockchain.users:
+            return "User already exists", 400
+
+        # Register user and create a wallet
+        blockchain.users[username] = blockchain.hash_password(password)
+        blockchain.save_users()
+
+        # Create a wallet for the new user
+        try:
+            blockchain.create_wallet(username, password)
+        except ValueError as e:
+            return str(e), 400
+
+        return redirect(url_for('login_page'))
+    return render_template('register.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

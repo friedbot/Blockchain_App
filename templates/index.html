@@ -1,48 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Blockchain</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain App</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index_styles.css') }}">
 </head>
 <body>
-    <h1>Welcome to the Blockchain App</h1>
-    <a href="/get_chain">View the Blockchain</a><br>
-    <a href="/is_valid">Check if Blockchain is Valid</a><br>
+    <header>
+        <h1>Welcome to the Blockchain App</h1>
+    </header>
 
-    <h2>Create a Wallet</h2>
-    <form action="/create_wallet" method="POST">
-        Address: <input type="text" name="address" required><br>
-        Password: <input type="password" name="password" required><br>
-        <input type="submit" value="Create Wallet">
-    </form>
+    <main>
+        <div class="container">
+            {% if 'username' in session %}
+                <p class="welcome-message">Welcome, {{ session['username'] }}!</p>
 
-    <h2>Check Balance</h2>
-    <form action="/get_balance" method="GET">
-        Address: <input type="text" name="address" required><br>
-        <input type="submit" value="Check Balance">
-    </form>
+                <!-- Display Balance for Logged-in User -->
+                <p class="balance">Balance: ${{ balance }}</p>
 
-    <h2>Add a Transaction</h2>
-    <form action="/add_transaction" method="POST">
-        Sender: <input type="text" name="sender" required><br>
-        Password: <input type="password" name="password" required><br>
-        Receiver: <input type="text" name="receiver" required><br>
-        Amount: <input type="text" name="amount" required><br>
-        <input type="submit" value="Add Transaction">
-    </form>
+                <a class="button" href="{{ url_for('logout') }}">Logout</a>
+                <div class="links">
+                    <a class="button" href="{{ url_for('get_chain') }}">View the Blockchain</a>
+                    <a class="button" href="{{ url_for('is_valid') }}">Check if Blockchain is Valid</a>
+                    <a class="button" href="{{ url_for('add_funds_page') }}">Add Funds</a>
+                    <a class="button" href="{{ url_for('suspend_wallet_page') }}">Suspend a Wallet</a>
+                    <a class="button" href="{{ url_for('find_owner_page') }}">Find Owner by Serial Number</a>
+                    <a class="button" href="{{ url_for('transfer_funds_page') }}">Transfer Funds</a>
+                </div>
+            {% else %}
+                <div class="auth-links">
+                    <a class="button" href="{{ url_for('login_page') }}">Login</a>
+                    <a class="button" href="{{ url_for('register_page') }}">Register</a>
+                </div>
+            {% endif %}
+        </div>
+    </main>
 
-    <h2>Add Funds</h2>
-    <form action="/add_funds" method="POST">
-        Address: <input type="text" name="address" required><br>
-        Amount: <input type="text" name="amount" required><br>
-        Serial Number: <input type="text" name="serial" required><br>
-        <input type="submit" value="Add Funds">
-    </form>
-
-    <h2>Suspend a Wallet</h2>
-    <form action="/suspend_wallet" method="POST">
-        Address: <input type="text" name="address" required><br>
-        <input type="submit" value="Suspend Wallet">
-    </form>
-
+    <footer>
+        <p>&copy; 2024 Blockchain App. All rights reserved.</p>
+    </footer>
 </body>
 </html>
