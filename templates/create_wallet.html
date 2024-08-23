@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Wallet</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+
+</head>
+<body>
+    <h1>Create Wallet</h1>
+    <form action="{{ url_for('create_wallet') }}" method="post">
+        <label>Password:</label>
+        <input type="password" name="password" required>
+        <button type="submit">Create Wallet</button>
+    </form>
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>

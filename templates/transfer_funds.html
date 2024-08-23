@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transfer Funds</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='transfer_styles.css') }}">
+
+</head>
+<body>
+    <h1>Transfer Funds</h1>
+    <form action="{{ url_for('add_transaction') }}" method="post">
+        <label>Password:</label>
+        <input type="password" name="password" required>
+        <label>Receiver Address:</label>
+        <input type="text" name="receiver" required>
+        <label>Amount:</label>
+        <input type="number" name="amount" step="any" required>
+        <button type="submit">Transfer</button>
+    </form>
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>

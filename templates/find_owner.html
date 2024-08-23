@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Find Owner</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+
+</head>
+<body>
+    <h1>Find Owner</h1>
+    <form action="{{ url_for('find_owner') }}" method="get">
+        <label>Serial Number:</label>
+        <input type="text" name="serial" required>
+        <button type="submit">Find Owner</button>
+    </form>
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>
