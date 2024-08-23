@@ -27,7 +27,6 @@
         Password: <input type="password" name="password" required><br>
         Receiver: <input type="text" name="receiver" required><br>
         Amount: <input type="text" name="amount" required><br>
-        Freeze Transaction: <input type="checkbox" name="is_freeze"><br>
         <input type="submit" value="Add Transaction">
     </form>
 
@@ -39,10 +38,11 @@
         <input type="submit" value="Add Funds">
     </form>
 
-    <h2>Find Owner by Serial Number</h2>
-    <form action="/find_owner" method="GET">
-        Serial Number: <input type="text" name="serial_number" required><br>
-        <input type="submit" value="Find Owner">
+    <h2>Suspend a Wallet</h2>
+    <form action="/suspend_wallet" method="POST">
+        Address: <input type="text" name="address" required><br>
+        <input type="submit" value="Suspend Wallet">
     </form>
+
 </body>
 </html>

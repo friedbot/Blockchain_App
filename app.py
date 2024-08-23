@@ -6,14 +6,19 @@ from flask import Flask, jsonify, request, render_template, redirect, url_for
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
+BLOCKCHAIN_FILE = 'blockchain.json'
+WALLETS_FILE = 'wallets.json'
 
 class Blockchain:
     def __init__(self):
-        self.chain = []
+        self.chain = self.load_chain()
         self.transactions = []
-        self.wallets = {}  # Dictionary to store wallet addresses, balances, denominations, and serial numbers
+        self.wallets = self.load_wallets()  # Load wallets from JSON file
         self.allowed_denominations = [1, 2, 5, 10, 50, 100, 200, 500]
-        self.create_block(proof=1, previous_hash='0')
+
+        # Check if the blockchain is empty and create a genesis block if necessary
+        if not self.chain:
+            self.create_block(proof=1, previous_hash='0')
 
     def create_block(self, proof, previous_hash):
         block = {
@@ -26,9 +31,12 @@ class Blockchain:
         block['hash'] = self.hash(block)  # Compute the hash of the block
         self.transactions = []
         self.chain.append(block)
+        self.save_chain()  # Save the blockchain to the JSON file
         return block
 
     def get_previous_block(self):
+        if len(self.chain) == 0:
+            raise IndexError("Blockchain is empty, no previous block found.")
         return self.chain[-1]
 
     def proof_of_work(self, previous_proof):
@@ -68,7 +76,7 @@ class Blockchain:
             block_index += 1
         return True
 
-    def add_transaction_and_create_block(self, sender, password, receiver, amount, is_freeze=False):
+    def add_transaction_and_create_block(self, sender, password, receiver, amount):
         optimized_amount = self.optimize_amount(amount)
 
         # Check if both sender and receiver wallets exist
@@ -85,11 +93,14 @@ class Blockchain:
         if self.wallets[sender]['balance'] < optimized_amount:
             return "Sender does not have enough funds", 400
 
+        # Check if the sender's wallet is suspended
+        if self.wallets[sender].get('is_suspended', False):
+            return "Sender's wallet is suspended", 400
+
         transaction = {
             'sender': sender,
             'receiver': receiver,
             'amount': optimized_amount,
-            'is_freeze': is_freeze,
             'status': 'success'  # Default status
         }
 
@@ -119,6 +130,7 @@ class Blockchain:
         # Update the wallet balances
         self.wallets[sender]['balance'] -= amount
         self.wallets[receiver]['balance'] += amount
+        self.save_wallets()  # Save the updated wallets data
 
     def create_wallet(self, address, password):
         if address in self.wallets:
@@ -126,8 +138,10 @@ class Blockchain:
         self.wallets[address] = {
             'balance': 0,
             'password': self.hash_password(password),
-            'denominations': {}  # To store denominations with their serial numbers
+            'denominations': {},  # To store denominations with their serial numbers
+            'is_suspended': False  # Initial state of the wallet
         }
+        self.save_wallets()  # Save the new wallet
         return self.wallets[address]['balance']
 
     def get_balance(self, address):
@@ -149,10 +163,10 @@ class Blockchain:
                         'receiver': address,
                         'amount': amount,
                         'serial_number': serial,
-                        'is_freeze': False,
                         'status': 'failed',
                         'reason': 'Duplicate serial number'
                     })
+                    self.save_chain()  # Save the transaction to the blockchain
                     return "Duplicate serial number", 400
 
             # Add funds and serial number to the wallet
@@ -167,7 +181,6 @@ class Blockchain:
                 'receiver': address,
                 'amount': amount,
                 'serial_number': serial,
-                'is_freeze': False,
                 'status': 'success'
             }
             self.transactions.append(transaction)
@@ -178,8 +191,16 @@ class Blockchain:
             proof = self.proof_of_work(previous_proof)
             previous_hash = self.hash(previous_block)
             block = self.create_block(proof, previous_hash)
+            self.save_wallets()  # Save the updated wallet data
             return block
 
+        else:
+            raise ValueError("Wallet does not exist")
+
+    def suspend_wallet(self, address):
+        if address in self.wallets:
+            self.wallets[address]['is_suspended'] = True
+            self.save_wallets()
         else:
             raise ValueError("Wallet does not exist")
 
@@ -190,26 +211,39 @@ class Blockchain:
         hashed_password = self.hash_password(password)
         return self.wallets[address]['password'] == hashed_password
 
-    def find_owner_by_serial(self, serial_number):
-        for address, wallet in self.wallets.items():
-            for amount, serials in wallet['denominations'].items():
-                if serial_number in serials:
-                    return address
-        return None
+
+    def save_chain(self):
+        with open(BLOCKCHAIN_FILE, 'w') as file:
+            json.dump(self.chain, file, indent=4)
+
+    def load_chain(self):
+        try:
+            with open(BLOCKCHAIN_FILE, 'r') as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+
+    def save_wallets(self):
+        with open(WALLETS_FILE, 'w') as file:
+            json.dump(self.wallets, file, indent=4)
+
+    def load_wallets(self):
+        try:
+            with open(WALLETS_FILE, 'r') as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
 
 blockchain = Blockchain()
-
 
 @app.route('/')
 def index():
     return render_template('index.html', denominations=blockchain.allowed_denominations)
 
-
 @app.route('/get_chain', methods=['GET'])
 def get_chain():
     chain = blockchain.chain
     return render_template('chain.html', chain=chain)
-
 
 @app.route('/is_valid', methods=['GET'])
 def is_valid():
@@ -217,21 +251,18 @@ def is_valid():
     message = 'All Good' if is_valid else 'Not a valid blockchain'
     return render_template('is_valid.html', message=message)
 
-
 @app.route('/add_transaction', methods=['POST'])
 def add_transaction():
     sender = request.form['sender']
     password = request.form['password']
     receiver = request.form['receiver']
     amount = float(request.form['amount'])
-    is_freeze = request.form.get('is_freeze') == 'on'
 
-    response = blockchain.add_transaction_and_create_block(sender, password, receiver, amount, is_freeze)
+    response = blockchain.add_transaction_and_create_block(sender, password, receiver, amount)
     if isinstance(response, tuple) and response[1] == 400:
         return response[0], 400  # Return the error message if there's an issue
 
     return redirect(url_for('get_chain'))
-
 
 @app.route('/create_wallet', methods=['POST'])
 def create_wallet():
@@ -241,45 +272,35 @@ def create_wallet():
         balance = blockchain.create_wallet(address, password)
     except ValueError as e:
         return str(e), 400
-    return redirect(url_for('index'))
+    return redirect(url_for('get_chain'))
 
-
-@app.route('/get_balance', methods=['GET'])
-def get_balance():
-    address = request.args.get('address')
+@app.route('/get_balance/<address>', methods=['GET'])
+def get_balance(address):
     try:
         balance = blockchain.get_balance(address)
-        denominations = blockchain.wallets[address]['denominations']
-        return render_template('balance.html', address=address, balance=balance, denominations=denominations)
+        return jsonify({'balance': balance}), 200
     except ValueError as e:
         return str(e), 400
-
 
 @app.route('/add_funds', methods=['POST'])
 def add_funds():
     address = request.form['address']
-    amount = int(request.form['amount'])
+    amount = float(request.form['amount'])
     serial = request.form['serial']
     try:
-        response = blockchain.add_funds(address, amount, serial)
-        if isinstance(response, tuple) and response[1] == 400:
-            return response[0], 400  # Return the error message if there's an issue
+        block = blockchain.add_funds(address, amount, serial)
     except ValueError as e:
         return str(e), 400
     return redirect(url_for('get_chain'))
 
-
-@app.route('/find_owner', methods=['GET'])
-def find_owner():
-    serial_number = request.args.get('serial_number')
-    if not serial_number:
-        return "Serial number is required", 400
-
-    owner = blockchain.find_owner_by_serial(serial_number)
-    if owner:
-        return jsonify({'serial_number': serial_number, 'owner': owner})
-    else:
-        return "Serial number not found", 404
+@app.route('/suspend_wallet', methods=['POST'])
+def suspend_wallet():
+    address = request.form['address']
+    try:
+        blockchain.suspend_wallet(address)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for('get_chain'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
