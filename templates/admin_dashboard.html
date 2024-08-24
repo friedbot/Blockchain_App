@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='admin_dashboard_styles.css') }}">
+</head>
+<body>
+    <h1>Admin Dashboard</h1>
+    <a href="{{ url_for('logout') }}">Logout</a><br><br>
+
+    <h2>Suspend a Wallet</h2>
+    <form action="{{ url_for('admin_suspend_wallet') }}" method="post">
+        <label for="address">Wallet Address:</label>
+        <input type="text" id="address" name="address" required><br><br>
+        <button type="submit">Suspend Wallet</button>
+    </form>
+
+    <h2>Find Owner by Serial Number</h2>
+    <form action="{{ url_for('admin_find_owner') }}" method="get">
+        <label for="serial">Serial Number:</label>
+        <input type="text" id="serial" name="serial" required><br><br>
+        <button type="submit">Find Owner</button>
+    </form>
+
+    {% if owner %}
+        <h3>Owner: {{ owner }}</h3>
+    {% endif %}
+</body>
+</html>
