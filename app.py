@@ -199,6 +199,18 @@ def admin_suspend_wallet():
     except ValueError as e:
         return str(e), 400
 
+@app.route('/list_serial_numbers', methods=['GET'])
+def list_serial_numbers():
+    if 'username' not in session:
+        return "Unauthorized access", 403
+
+    address = session['username']
+    try:
+        serial_numbers = blockchain.list_serial_numbers(address)
+        return render_template('list_serial_numbers.html', serial_numbers=serial_numbers)
+    except ValueError as e:
+        return str(e), 400
+
 @app.route('/admin/find_owner', methods=['GET'])
 def admin_find_owner():
     if 'admin' not in session:

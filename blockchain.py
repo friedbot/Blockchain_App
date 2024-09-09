@@ -3,7 +3,7 @@ import hashlib
 import json
 import threading
 import time
-
+import os
 BLOCKCHAIN_FILE = 'blockchain.json'
 WALLETS_FILE = 'wallets.json'
 USERS_FILE = 'users.json'
@@ -236,6 +236,14 @@ class Blockchain:
                 return json.load(file)
         except (FileNotFoundError, json.JSONDecodeError):
             return {}
+
+    def list_serial_numbers(self, address):
+        if address in self.wallets:
+            denominations = self.wallets[address].get('denominations', {})
+            serial_numbers = [serial for serial_list in denominations.values() for serial in serial_list]
+            return serial_numbers
+        else:
+            raise ValueError("Wallet does not exist")
 
     def start_validity_check(self):
         def check_validity_periodically():
