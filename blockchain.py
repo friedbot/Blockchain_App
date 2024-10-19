@@ -4,13 +4,16 @@ import json
 import threading
 import time
 import os
-BLOCKCHAIN_FILE = 'blockchain.json'
-WALLETS_FILE = 'wallets.json'
-USERS_FILE = 'users.json'
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+BLOCKCHAIN_FILE = 'blockchain.json'  # Local backup file (optional)
+
 
 class Blockchain:
     def __init__(self):
-        self.chain = self.load_chain()
+        self.initialize_firebase()  # Initialize Firebase first
+        self.chain = self.load_chain()  # Load blockchain from local file (optional)
         self.transactions = []
         self.wallets = self.load_wallets()
         self.users = self.load_users()
@@ -21,6 +24,45 @@ class Blockchain:
 
         # Start the validity check in a separate thread
         self.start_validity_check()
+
+    def initialize_firebase(self):
+        cred = credentials.Certificate(
+            'blockchainapp-e45d8-firebase-adminsdk-jfmvu-58c2068b24.json')  # Your Firebase Admin SDK key
+        firebase_admin.initialize_app(cred)
+        self.db = firestore.client()  # Initialize Firestore client
+
+    def save_wallets(self):
+        # Save all wallets to Firestore
+        for username, wallet_data in self.wallets.items():
+            # Convert all fields to strings
+            wallet_data_stringified = {
+                'balance': str(wallet_data['balance']),  # Save balance as string for Firestore
+                'password': wallet_data['password'],  # Assuming password remains hashed
+                'denominations': {str(amount): list(map(str, serials)) for amount, serials in
+                                  wallet_data['denominations'].items()},
+                'is_suspended': str(wallet_data.get('is_suspended', "False"))  # Ensure is_suspended is a string
+            }
+
+            try:
+                doc_ref = self.db.collection('wallets').document(username)
+                doc_ref.set(wallet_data_stringified)  # Synchronous write
+                print(f"Wallet for {username} updated successfully in Firestore.")
+            except Exception as e:
+                print(f"Failed to update wallet for {username} in Firestore: {e}")
+
+    def load_wallets(self):
+        wallets = {}
+        try:
+            wallets_ref = self.db.collection('wallets')
+            for doc in wallets_ref.stream():
+                wallet_data = doc.to_dict()
+                # Convert balance to float when loading
+                wallet_data['balance'] = float(wallet_data['balance'])
+                wallets[doc.id] = wallet_data
+            print("Wallets loaded successfully.")
+        except Exception as e:
+            print(f"Failed to load wallets: {e}")
+        return wallets
 
     def create_block(self, proof, previous_hash):
         block = {
@@ -92,16 +134,17 @@ class Blockchain:
         if not self.verify_password(sender, password):
             return "Incorrect password", 400
 
-        if self.wallets[sender]['balance'] < optimized_amount:
+        # Ensure balance comparison is done as float
+        if float(self.wallets[sender]['balance']) < optimized_amount:
             return "Sender does not have enough funds", 400
 
-        if self.wallets[sender].get('is_suspended', False):
+        if self.wallets[sender].get('is_suspended') is "True":
             return "Sender's wallet is suspended", 400
 
         transaction = {
             'sender': sender,
             'receiver': receiver,
-            'amount': optimized_amount,
+            'amount': str(optimized_amount),  # Convert to string for storage
             'status': 'success'
         }
 
@@ -133,7 +176,7 @@ class Blockchain:
         if address in self.wallets:
             raise ValueError("Wallet already exists")
         self.wallets[address] = {
-            'balance': 0,
+            'balance': 0.0,  # Ensure balance is a float
             'password': self.hash_password(password),
             'denominations': {},
             'is_suspended': False
@@ -148,51 +191,55 @@ class Blockchain:
             raise ValueError("Wallet does not exist")
 
     def add_funds(self, address, amount, serial):
-        if address in self.wallets:
-            if amount not in self.allowed_denominations:
-                raise ValueError("Amount must be in allowed denominations")
-
-            for wallet in self.wallets.values():
-                if serial in [s for serials in wallet['denominations'].values() for s in serials]:
-                    self.transactions.append({
-                        'sender': 'Admin',
-                        'receiver': address,
-                        'amount': amount,
-                        'serial_number': serial,
-                        'status': 'failed',
-                        'reason': 'Duplicate serial number'
-                    })
-                    self.save_chain()
-                    return "Duplicate serial number", 400
-
-            if amount not in self.wallets[address]['denominations']:
-                self.wallets[address]['denominations'][amount] = []
-            self.wallets[address]['denominations'][amount].append(serial)
-            self.wallets[address]['balance'] += amount
-
-            transaction = {
-                'sender': 'Admin',
-                'receiver': address,
-                'amount': amount,
-                'serial_number': serial,
-                'status': 'success'
-            }
-            self.transactions.append(transaction)
-
-            previous_block = self.get_previous_block()
-            previous_proof = previous_block['proof']
-            proof = self.proof_of_work(previous_proof)
-            previous_hash = self.hash(previous_block)
-            block = self.create_block(proof, previous_hash)
-            self.save_wallets()
-            return block
-
-        else:
+        if address not in self.wallets:
             raise ValueError("Wallet does not exist")
+
+        if amount not in self.allowed_denominations:
+            raise ValueError("Amount must be in allowed denominations")
+
+        # Check for duplicate serial numbers
+        for wallet in self.wallets.values():
+            if serial in [s for serials in wallet['denominations'].values() for s in serials]:
+                self.transactions.append({
+                    'sender': 'Admin',
+                    'receiver': address,
+                    'amount': str(amount),
+                    'serial_number': str(serial),
+                    'status': 'failed',
+                    'reason': 'Duplicate serial number'
+                })
+                return "Duplicate serial number", 400
+
+        # Update wallet and balance
+        self.wallets[address]['denominations'].setdefault(amount, []).append(str(serial))
+
+        # Ensure the balance is treated as a float before updating
+        current_balance = self.wallets[address]['balance']
+        self.wallets[address]['balance'] = float(current_balance) + float(amount)
+
+        # Save the new balance as a string for Firestore
+        self.wallets[address]['balance'] = str(self.wallets[address]['balance'])
+
+        transaction = {
+            'sender': 'Admin',
+            'receiver': address,
+            'amount': str(amount),
+            'serial_number': str(serial),
+            'status': 'success'
+        }
+        self.transactions.append(transaction)
+
+        previous_block = self.get_previous_block()
+        proof = self.proof_of_work(previous_block['proof'])
+        previous_hash = self.hash(previous_block)
+        block = self.create_block(proof, previous_hash)
+
+        self.save_wallets()  # Save wallets to Firestore immediately after funds are added
+        return block
 
     def suspend_wallet(self, address):
         if address in self.wallets:
-            self.wallets[address]['is_suspended'] = True
+            self.wallets[address]['is_suspended'] = "True"
             self.save_wallets()
         else:
             raise ValueError("Wallet does not exist")
@@ -201,69 +248,62 @@ class Blockchain:
         return hashlib.sha256(password.encode()).hexdigest()
 
     def verify_password(self, username, password):
-        hashed_password = self.hash_password(password)
-        return self.users.get(username) == hashed_password
-
-    def save_chain(self):
-        with open(BLOCKCHAIN_FILE, 'w') as file:
-            json.dump(self.chain, file, indent=4)
-
-    def load_chain(self):
-        try:
-            with open(BLOCKCHAIN_FILE, 'r') as file:
-                return json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
-
-    def save_wallets(self):
-        with open(WALLETS_FILE, 'w') as file:
-            json.dump(self.wallets, file, indent=4)
-
-    def load_wallets(self):
-        try:
-            with open(WALLETS_FILE, 'r') as file:
-                return json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
+        hashed_password = self.wallets.get(username, {}).get('password')
+        return hashed_password == self.hash_password(password)
 
     def save_users(self):
-        with open(USERS_FILE, 'w') as file:
-            json.dump(self.users, file, indent=4)
+        # Save all users to Firestore
+        for username, user_data in self.users.items():
+            try:
+                doc_ref = self.db.collection('users').document(username)
+                doc_ref.set(user_data)  # Assuming user_data is already a dictionary with the required fields
+                print(f"User {username} updated successfully in Firestore.")
+            except Exception as e:
+                print(f"Failed to update user {username} in Firestore: {e}")
 
     def load_users(self):
+        # Load users from Firestore
+        users = {}
         try:
-            with open(USERS_FILE, 'r') as file:
-                return json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
+            users_ref = self.db.collection('users')
+            for doc in users_ref.stream():
+                user_data = doc.to_dict()
+                users[doc.id] = user_data
+            print("Users loaded successfully.")
+        except Exception as e:
+            print(f"Failed to load users: {e}")
+        return users
 
-    def list_serial_numbers(self, address):
-        if address in self.wallets:
-            denominations = self.wallets[address].get('denominations', {})
-            serial_numbers = [serial for serial_list in denominations.values() for serial in serial_list]
-            return serial_numbers
-        else:
-            raise ValueError("Wallet does not exist")
+    def load_chain(self):
+        # Load blockchain from local file (optional)
+        if os.path.exists(BLOCKCHAIN_FILE):
+            with open(BLOCKCHAIN_FILE, 'r') as file:
+                return json.load(file)
+        return []
+
+    def save_chain(self):
+        # Save blockchain to local file (optional)
+        with open(BLOCKCHAIN_FILE, 'w') as file:
+            json.dump(self.chain, file)
 
     def start_validity_check(self):
-        def check_validity_periodically():
-            while True:
-                if not self.is_chain_valid(self.chain):
-                    print("Blockchain is not valid! Restoring from backup...")
-                    self.restore_from_backup()
-                else:
-                    print("Blockchain is valid.")
-                time.sleep(60)  # Check every 60 seconds
+        # Start a separate thread to check validity
+        validity_thread = threading.Thread(target=self.check_validity, daemon=True)
+        validity_thread.start()
 
-        # Start the thread
-        threading.Thread(target=check_validity_periodically, daemon=True).start()
+    def check_validity(self):
+        while True:
+            time.sleep(60)  # Check every 60 seconds
+            if not self.is_chain_valid(self.chain):
+                print("Blockchain is invalid!")
+            else:
+                print("Blockchain is valid.")
 
-    def restore_from_backup(self):
-        backup_file = 'blockchain_backup.json'
-        if os.path.exists(backup_file):
-            with open(backup_file, 'r') as file:
-                self.chain = json.load(file)
-            self.save_chain()
-            print("Blockchain restored from backup.")
-        else:
-            print("Backup file does not exist.")
+    def list_serial_numbers(self, address):
+        if address not in self.wallets:
+            raise ValueError("Wallet does not exist")
+
+        denominations = self.wallets[address]['denominations']
+        serial_numbers = {amount: serials for amount, serials in denominations.items()}
+        return serial_numbers
+# Example usage
